@@ -470,6 +470,7 @@
   // ---------------------------------------------------------------- colegi online
   // anonim: un id aleator per filă (nu e salvat nicăieri), fără cookie-uri; serverul ține doar id + post + ora.
   // Cât timp pagina e deschisă (sau cântă în fundal) trimite un semnal la 45 s; la închidere anunță plecarea.
+  let chatHook = null; // setat de chat: primește ultimul id de mesaj la fiecare semnal
   const live = (() => {
     const sid = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
     let counts = {};
@@ -477,7 +478,7 @@
     let ok = false;
     let beatT = null, current = '', away = false;
     const json = (r) => (r.ok ? r.json() : Promise.reject(r.status));
-    const got = (data) => { if (data && data.counts) { counts = data.counts; online = data.online || 0; ok = true; paint(); } };
+    const got = (data) => { if (data && data.counts) { counts = data.counts; online = data.online || 0; ok = true; paint(); if (chatHook) chatHook(data.chat); } };
     const lost = () => { if (ok) { ok = false; paint(); } };
     // text/plain = cerere „simplă”, fără preflight CORS
     function send(body) {
@@ -522,8 +523,146 @@
       });
       addEventListener('pagehide', leave);
     }
-    return { start, stop, paint, n };
+    return { start, stop, paint, n, sid };
   })();
+  // ---------------------------------------------------------------- chat colegi
+  // nume ales de fiecare (salvat doar în browserul lui), mesajele stau pe server 24 h
+  const chat = (() => {
+    const panel = $('#chat'), list = $('#chat-list'), fab = $('#chat-fab'), badge = $('#chat-badge');
+    const form = $('#chat-form'), input = $('#chat-input'), nameForm = $('#chat-name-form'), nameInput = $('#chat-name');
+    let last = 0, open = false, pollT = null, loading = false, latest = 0;
+    let seen = store.get('dany.chatSeen', 0);
+    let nick = store.get('dany.nick', '');
+    const sid = live.sid;
+
+    const hueOf = (s) => hash(fold(s)) % 360;
+    const timeOf = (ts) => new Date(ts * 1000).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+
+    function showBadge() {
+      const n = open ? 0 : Math.max(0, latest - seen);
+      badge.hidden = n === 0;
+      badge.textContent = n > 99 ? '99+' : String(n);
+    }
+    function markSeen() { if (last > seen) { seen = last; store.set('dany.chatSeen', seen); } showBadge(); }
+
+    function add(msgs) {
+      if (!msgs || !msgs.length) return;
+      const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+      const frag = document.createDocumentFragment();
+      for (const m of msgs) {
+        if (m.id <= last) continue;
+        last = m.id;
+        const el = document.createElement('div');
+        el.className = `msg${m.name === nick ? ' mine' : ''}`;
+        el.innerHTML = `<div class="msg-meta"><b style="color:hsl(${hueOf(m.name)} 75% 70%)"></b>${m.station ? '<span class="msg-st"></span>' : ''}<time>${timeOf(m.ts)}</time></div><div class="bubble"></div>`;
+        el.querySelector('b').textContent = m.name;
+        if (m.station) el.querySelector('.msg-st').textContent = `🎧 ${m.station}`;
+        el.querySelector('.bubble').textContent = m.text;
+        frag.appendChild(el);
+      }
+      $('#chat-empty').hidden = true;
+      list.appendChild(frag);
+      latest = Math.max(latest, last);
+      if (atBottom || msgs.some((m) => m.name === nick)) list.scrollTop = list.scrollHeight;
+      if (open) markSeen();
+    }
+
+    function fetchNew() {
+      if (loading || document.visibilityState !== 'visible') return;
+      loading = true;
+      fetch(`${COUNTER}/chat?after=${last}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+        .then((d) => { add(d.msgs); if (!last) $('#chat-empty').hidden = false; })
+        .catch(() => {})
+        .finally(() => { loading = false; });
+    }
+
+    function syncName() {
+      const has = !!nick;
+      nameForm.hidden = has;
+      form.hidden = !has;
+      $('#chat-me').textContent = has ? `Tu: ${nick} ✎` : '';
+      $('#chat-me').hidden = !has;
+    }
+
+    // iPhone: când apare tastatura, panoul se strânge pe zona vizibilă
+    function fitViewport() {
+      if (!open || !window.visualViewport || innerWidth > 640) { panel.style.height = ''; panel.style.top = ''; return; }
+      panel.style.height = `${visualViewport.height}px`;
+      panel.style.top = `${visualViewport.offsetTop}px`;
+      list.scrollTop = list.scrollHeight;
+    }
+
+    function setOpen(v) {
+      open = v;
+      panel.hidden = !v;
+      fab.setAttribute('aria-expanded', v);
+      document.body.classList.toggle('chat-open', v);
+      clearInterval(pollT);
+      if (v) {
+        syncName();
+        fetchNew();
+        pollT = setInterval(fetchNew, 4000);
+        list.scrollTop = list.scrollHeight;
+        markSeen();
+        fitViewport();
+        if (innerWidth > 640) (nick ? input : nameInput).focus();
+      } else {
+        showBadge();
+      }
+    }
+
+    fab.addEventListener('click', () => setOpen(!open));
+    $('#chat-close').addEventListener('click', () => setOpen(false));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) setOpen(false); });
+    if (window.visualViewport) {
+      visualViewport.addEventListener('resize', fitViewport);
+      visualViewport.addEventListener('scroll', fitViewport);
+    }
+
+    nameForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const v = nameInput.value.replace(/\s+/g, ' ').trim().slice(0, 24);
+      if (!v) { nameInput.focus(); return; }
+      nick = v;
+      store.set('dany.nick', nick);
+      syncName();
+      input.focus();
+    });
+    $('#chat-me').addEventListener('click', () => {
+      nameInput.value = nick;
+      nick = '';
+      syncName();
+      nameInput.focus();
+    });
+
+    let sending = false;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text || sending) return;
+      sending = true;
+      const station = state.current && (player.playing || player.loading) ? state.current.name : '';
+      fetch(`${COUNTER}/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ sid, name: nick, text, station, after: last }),
+      }).then((r) => r.json()).then((d) => {
+        if (d.error === 'slow') { toast('Mai încet puțin 🙂'); return; }
+        if (d.error) { toast('Mesajul nu a plecat. Încearcă din nou.'); return; }
+        input.value = '';
+        add(d.msgs);
+      }).catch(() => toast('Mesajul nu a plecat. Verifică internetul.'))
+        .finally(() => { sending = false; input.focus(); });
+    });
+
+    if (COUNTER) fab.hidden = false;
+    syncName();
+    return {
+      // vine din semnalul de prezență (la ~45 s): ultimul id de mesaj de pe server
+      beat(n) { latest = Math.max(latest, n || 0); showBadge(); },
+    };
+  })();
+  chatHook = (n) => chat.beat(n);
+
   function lcText(id) { const k = live.n(id); return k > 0 ? `🎧 ${k}` : ''; }
 
   // ---------------------------------------------------------------- favorite

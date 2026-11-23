@@ -23,7 +23,7 @@
   <link rel="icon" href="icons/favicon-64.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preconnect" href="https://de1.api.radio-browser.info" crossorigin>
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <div class="ambient" aria-hidden="true"></div>
@@ -91,11 +91,38 @@
     </div>
   </section>
 
+  <button id="chat-fab" class="chat-fab" aria-label="Chat colegi" aria-expanded="false" aria-controls="chat" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5z" fill="currentColor"/></svg>
+    <span id="chat-badge" class="chat-badge" hidden></span>
+  </button>
+
+  <section id="chat" class="chat" role="dialog" aria-label="Chat colegi" hidden>
+    <header class="chat-head">
+      <div>
+        <h2>Chat colegi</h2>
+        <button id="chat-me" class="chat-me" type="button" hidden></button>
+      </div>
+      <button id="chat-close" class="ib" type="button" aria-label="Închide chatul"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+    </header>
+    <div id="chat-list" class="chat-list" aria-live="polite">
+      <p id="chat-empty" class="chat-empty" hidden>Niciun mesaj azi. Scrie tu primul! 👋</p>
+    </div>
+    <p class="chat-note">Mesajele se șterg singure după 24 de ore.</p>
+    <form id="chat-name-form" class="chat-form" hidden>
+      <input id="chat-name" maxlength="24" placeholder="Cum te cheamă?" autocomplete="nickname" enterkeyhint="done" aria-label="Numele tău">
+      <button type="submit" class="chat-send">Intră</button>
+    </form>
+    <form id="chat-form" class="chat-form" hidden>
+      <input id="chat-input" maxlength="400" placeholder="Scrie un mesaj…" autocomplete="off" enterkeyhint="send" aria-label="Mesaj">
+      <button type="submit" class="chat-send" aria-label="Trimite"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" fill="currentColor"/></svg></button>
+    </form>
+  </section>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <audio id="audio" preload="none" playsinline></audio>
 
-  <script src="fixes.js?v=5"></script>
-  <script src="stations.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="fixes.js?v=6"></script>
+  <script src="stations.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
