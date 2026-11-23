@@ -15,7 +15,7 @@
   const CACHE_TTL = 12 * 3600 * 1000;
   const CONNECT_TIMEOUT = 15000;
   // contorul „colegi ascultă” (Cloudflare Worker). Gol = contor ascuns. ?counter=URL îl suprascrie pt teste.
-  const COUNTER_URL = '';
+  const COUNTER_URL = 'https://danycolegu-live.demrender-server.workers.dev';
   const IMG_PROXY = 'https://images.weserv.nl/?w=48&h=48&fit=contain&output=png&url=';
   const params = new URLSearchParams(location.search);
   // ?https=1 simulează o pagină securizată când rulezi local pe http
