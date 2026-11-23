@@ -217,6 +217,7 @@
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = player.playing ? 'playing' : 'paused';
     document.querySelectorAll('.card.on').forEach((c) => c.classList.toggle('playing', player.playing));
     if (kind === 'live') live.start(); else if (kind !== 'load') live.stop();
+    document.body.classList.toggle('is-playing', player.playing);
   }
 
   function showPlayer(st) {
@@ -540,8 +541,8 @@
 
     function showBadge() {
       const n = open ? 0 : Math.max(0, latest - seen);
-      badge.hidden = n === 0;
-      badge.textContent = n > 99 ? '99+' : String(n);
+      const txt = n > 99 ? '99+' : String(n);
+      for (const b of [badge, $('#nav-badge')]) { b.hidden = n === 0; b.textContent = txt; }
     }
     function markSeen() { if (last > seen) { seen = last; store.set('dany.chatSeen', seen); } showBadge(); }
 
@@ -586,7 +587,10 @@
 
     // iPhone: când apare tastatura, panoul se strânge pe zona vizibilă
     function fitViewport() {
-      if (!open || !window.visualViewport || innerWidth > 640) { panel.style.height = ''; panel.style.top = ''; return; }
+      // doar cu tastatura deschisă (zona vizibilă mult mai mică decât ecranul); altfel bara de jos rămâne vizibilă
+      const kb = window.visualViewport && innerHeight - visualViewport.height > 120;
+      if (!open || !kb || innerWidth > 640) { panel.style.height = ''; panel.style.top = ''; panel.style.bottom = ''; return; }
+      panel.style.bottom = 'auto';
       panel.style.height = `${visualViewport.height}px`;
       panel.style.top = `${visualViewport.offsetTop}px`;
       list.scrollTop = list.scrollHeight;
@@ -596,6 +600,10 @@
       open = v;
       panel.hidden = !v;
       fab.setAttribute('aria-expanded', v);
+      document.querySelectorAll('#bnav [data-view]').forEach((b) => {
+        const on = (b.dataset.view === 'chat') === v;
+        if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      });
       document.body.classList.toggle('chat-open', v);
       clearInterval(pollT);
       if (v) {
@@ -654,7 +662,18 @@
         .finally(() => { sending = false; input.focus(); });
     });
 
-    if (COUNTER) fab.hidden = false;
+    if (COUNTER) {
+      fab.hidden = false;
+      $('#bnav').hidden = false;
+      document.body.classList.add('has-nav');
+      $('#bnav').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-view]');
+        if (!b) return;
+        const wantChat = b.dataset.view === 'chat';
+        if (wantChat !== open) setOpen(wantChat);
+        else if (!wantChat) window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
     syncName();
     return {
       // vine din semnalul de prezență (la ~45 s): ultimul id de mesaj de pe server
@@ -817,7 +836,7 @@
 
   // ---------------------------------------------------------------- actualizare automată
   // telefonul ține pagina în cache; la deschidere verificăm version.json și reîncărcăm dacă e versiune nouă
-  const VERSION = '7';
+  const VERSION = '8';
   function checkUpdate() {
     if (location.protocol !== 'https:') return;
     fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' }).then((r) => r.json()).then((d) => {
