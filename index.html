@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="ambient" aria-hidden="true"></div>
   <header class="top">
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
@@ -63,10 +64,10 @@
 
   <section id="player" class="player" aria-label="Player" hidden>
     <div class="np">
-      <div id="np-logo" class="logo"></div>
+      <div class="disc-wrap"><div class="disc" id="np-disc"><div id="np-logo" class="logo"></div></div></div>
       <div class="np-text">
         <div id="np-name" class="np-name"></div>
-        <div id="np-state" class="np-state"></div>
+        <div class="np-row"><span class="np-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span id="np-state" class="np-state"></span><span id="np-live" class="np-live" hidden></span></div>
       </div>
     </div>
     <div class="ctrls">
@@ -76,6 +77,7 @@
     </div>
     <div class="extra">
       <button id="btn-fav" class="ib fav-btn" aria-label="Adaugă la favorite" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 20.3 4.6 13a4.6 4.6 0 0 1 6.5-6.6l.9.9.9-.9A4.6 4.6 0 0 1 19.4 13z" fill="currentColor"/></svg></button>
+      <button id="btn-share" class="ib share" aria-label="Trimite postul"><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button id="btn-timer" class="ib timer" aria-label="Oprire automată"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="currentColor"/></svg><span id="timer-label"></span></button>
       <label class="vol" id="vol-wrap">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>

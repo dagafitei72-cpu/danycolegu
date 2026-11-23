@@ -14,9 +14,13 @@
   const CACHE_KEY = 'dany.cache.v6';
   const CACHE_TTL = 12 * 3600 * 1000;
   const CONNECT_TIMEOUT = 15000;
+  // contorul „colegi ascultă” (Cloudflare Worker). Gol = contor ascuns. ?counter=URL îl suprascrie pt teste.
+  const COUNTER_URL = '';
+  const IMG_PROXY = 'https://images.weserv.nl/?w=48&h=48&fit=contain&output=png&url=';
   const params = new URLSearchParams(location.search);
   // ?https=1 simulează o pagină securizată când rulezi local pe http
   const SECURE = location.protocol === 'https:' || params.has('https');
+  const COUNTER = (params.get('counter') || COUNTER_URL).replace(/\/$/, '');
 
   const { GENRES, fold } = DanyStations;
 
@@ -128,7 +132,7 @@
     return `<article class="card${on ? ' on' : ''}${on && player.playing ? ' playing' : ''}${off ? ' off' : ''}" data-id="${st.id}">
       <button class="hit" aria-label="Ascultă ${esc(st.name)}"></button>
       ${logoHTML(st)}
-      <div class="meta"><div class="name">${esc(st.name)}</div><div class="sub">${subLine(st)}</div></div>
+      <div class="meta"><div class="name">${esc(st.name)}</div><div class="sub"><span class="sl">${subLine(st)}</span><span class="lc">${lcText(st.id)}</span></div></div>
       <button class="fav" aria-label="Favorit" aria-pressed="${fav}"><svg viewBox="0 0 24 24"><path d="M12 20.3 4.6 13a4.6 4.6 0 0 1 6.5-6.6l.9.9.9-.9A4.6 4.6 0 0 1 19.4 13z" fill="currentColor"/></svg></button>
     </article>`;
   }
@@ -212,6 +216,7 @@
     $('#btn-play').setAttribute('aria-label', player.playing || player.loading ? 'Oprește' : 'Pornește');
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = player.playing ? 'playing' : 'paused';
     document.querySelectorAll('.card.on').forEach((c) => c.classList.toggle('playing', player.playing));
+    if (kind === 'live') live.start(); else if (kind !== 'load') live.stop();
   }
 
   function showPlayer(st) {
@@ -219,6 +224,8 @@
     $('#np-logo').outerHTML = logoHTML(st).replace('class="logo ', 'id="np-logo" class="logo ');
     $('#np-name').textContent = st.name;
     syncFavBtn();
+    applyTint(st);
+    live.paint();
   }
 
   function syncFavBtn() {
@@ -294,7 +301,7 @@
       // o reîncercare automată: rețeaua mobilă sau serverul postului pot sughița
       player.attempt = 1;
       setState('load', 'Reîncerc…');
-      setTimeout(() => { if (state.current === st && player.loading) play(st, true); }, 800);
+      setTimeout(() => { if (state.current === st && player.loading) play(st, true); }, 2000);
       return;
     }
     state.failed.add(st.id);
@@ -326,7 +333,7 @@
       c.classList.toggle('on', !!on);
       c.classList.toggle('playing', !!on && player.playing);
       const st = state.byId.get(c.dataset.id);
-      if (st) c.querySelector('.sub').innerHTML = subLine(st);
+      if (st) c.querySelector('.sl').innerHTML = subLine(st);
     });
   }
 
@@ -361,6 +368,160 @@
     set('previoustrack', () => step(-1));
     set('nexttrack', () => step(1));
   }
+
+
+  // ---------------------------------------------------------------- look pe post
+  // culoarea dominantă din logo (prin proxy de imagini cu CORS); fără logo → nuanța inițialelor
+  const tintCache = new Map();
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+    if (mx === mn) return [0, 0, l];
+    const d = mx - mn, sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    const h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [h * 60, sat, l];
+  }
+  function dominantHue(img) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 40;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0, 40, 40);
+    const px = x.getImageData(0, 0, 40, 40).data;
+    const bins = new Float64Array(24), sats = new Float64Array(24);
+    let total = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] < 160) continue;
+      const [h, sat, l] = rgbToHsl(px[i], px[i + 1], px[i + 2]);
+      if (sat < 0.28 || l < 0.12 || l > 0.9) continue;
+      const w = sat * (1 - Math.abs(l - 0.5));
+      const b = Math.floor(h / 15) % 24;
+      bins[b] += w; sats[b] += sat * w; total += w;
+    }
+    if (total < 6) return null; // logo alb-negru → rămâne culoarea casei
+    const score = (b) => bins[b] + 0.5 * (bins[(b + 23) % 24] + bins[(b + 1) % 24]);
+    let best = 0;
+    for (let b = 1; b < 24; b++) if (score(b) > score(best)) best = b;
+    return { h: best * 15 + 7, s: sats[best] / bins[best] };
+  }
+  function tintFor(st) {
+    if (tintCache.has(st.id)) return Promise.resolve(tintCache.get(st.id));
+    const fallback = () => ({ h: hash(st.key || st.name) % 360, s: 0.6 });
+    if (!st.favicon) { const t = fallback(); tintCache.set(st.id, t); return Promise.resolve(t); }
+    return new Promise((done) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.referrerPolicy = 'no-referrer';
+      const finish = (t) => { tintCache.set(st.id, t); done(t); };
+      const timer = setTimeout(() => finish(fallback()), 4000);
+      img.onload = () => { clearTimeout(timer); let t = null; try { t = dominantHue(img); } catch { /* canvas blocat */ } finish(t); };
+      img.onerror = () => { clearTimeout(timer); finish(fallback()); };
+      img.src = IMG_PROXY + encodeURIComponent(st.favicon.replace(/^https?:\/\//, ''));
+    });
+  }
+  function applyTint(st) {
+    tintFor(st).then((t) => {
+      if (!state.current || state.current.id !== st.id) return;
+      const css = t ? `hsl(${Math.round(t.h)} ${Math.round(Math.min(0.9, Math.max(0.55, t.s)) * 100)}% 60%)` : '#ffb547';
+      document.body.style.setProperty('--tint', css);
+    });
+  }
+
+  // ---------------------------------------------------------------- trimite postul
+  function shareLink(st) { return `${location.origin}${location.pathname}?post=${encodeURIComponent(st.id)}`; }
+  async function shareCurrent() {
+    const st = state.current;
+    if (!st) return;
+    const url = shareLink(st);
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      try { await navigator.share({ title: `${st.name} pe DanyColegu`, text: `Ascultă ${st.name} pe DanyColegu 📻`, url }); } catch { /* anulat */ }
+      return;
+    }
+    try { await navigator.clipboard.writeText(url); toast('Link copiat. Trimite-l colegilor!'); } catch {
+      const ta = document.createElement('textarea');
+      ta.value = url; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch { /* vechi */ }
+      ta.remove();
+      if (copied) toast('Link copiat. Trimite-l colegilor!'); else prompt('Copiază linkul:', url);
+    }
+  }
+  let sharedHandled = false;
+  function openShared() {
+    if (sharedHandled) return;
+    const id = new URLSearchParams(location.search).get('post');
+    if (!id || !state.all.length) return;
+    sharedHandled = true;
+    const st = state.byId.get(id);
+    if (!st) { toast('Postul din link nu mai e în listă.'); return; }
+    if (blocked(st)) { toast('Postul din link nu poate porni pe pagina asta (doar http).'); return; }
+    stopAudio();
+    state.current = st;
+    showPlayer(st);
+    setState('idle', 'Apasă play ca să asculți');
+    updateMediaSession(st);
+    markCards();
+    const card = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+    if (card) card.scrollIntoView({ block: 'center' });
+    const q = new URLSearchParams(location.search); q.delete('post');
+    history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : ''));
+  }
+
+  // ---------------------------------------------------------------- colegi ascultă
+  // anonim: un id aleator per filă (nu e salvat nicăieri), fără cookie-uri; serverul ține doar id + post + ora
+  const live = (() => {
+    const sid = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+    let counts = {};
+    let ok = false;
+    let beatT = null, pollT = null, current = '';
+    const json = (r) => (r.ok ? r.json() : Promise.reject(r.status));
+    const got = (data) => { if (data && data.counts) { counts = data.counts; ok = true; paint(); } };
+    const lost = () => { if (ok) { ok = false; paint(); } };
+    // text/plain = cerere „simplă”, fără preflight CORS
+    function beat() {
+      fetch(`${COUNTER}/beat`, { method: 'POST', body: JSON.stringify({ sid, station: current }), keepalive: true, headers: { 'Content-Type': 'text/plain' } })
+        .then(json).then(got, lost);
+    }
+    function poll() {
+      if (document.visibilityState !== 'visible') return;
+      fetch(`${COUNTER}/counts`).then(json).then(got, lost);
+    }
+    function start() {
+      if (!COUNTER || !state.current) return;
+      if (current === state.current.id && beatT) return;
+      current = state.current.id;
+      clearInterval(beatT); clearInterval(pollT); pollT = null;
+      beat();
+      beatT = setInterval(beat, 45000);
+    }
+    function stop() {
+      if (!COUNTER) return;
+      if (beatT) { clearInterval(beatT); beatT = null; current = ''; beat(); }
+      if (!pollT) pollT = setInterval(poll, 60000);
+    }
+    function n(id) { return ok ? counts[id] || 0 : 0; }
+    function paint() {
+      document.querySelectorAll('.card').forEach((c) => {
+        const el = c.querySelector('.lc');
+        if (el) el.textContent = lcText(c.dataset.id);
+      });
+      const el = $('#np-live');
+      const k = state.current ? n(state.current.id) : 0;
+      el.hidden = k < 2;
+      el.textContent = k >= 2 ? `🎧 ${k} colegi ascultă` : '';
+      el.dataset.short = k >= 2 ? `🎧 ${k}` : '';
+    }
+    if (COUNTER) {
+      poll();
+      pollT = setInterval(poll, 60000);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (beatT) beat(); else poll(); } });
+      addEventListener('pagehide', () => {
+        if (beatT && navigator.sendBeacon) navigator.sendBeacon(`${COUNTER}/beat`, JSON.stringify({ sid, station: '' }));
+      });
+    }
+    return { start, stop, paint, n };
+  })();
+  function lcText(id) { const k = live.n(id); return k > 0 ? `🎧 ${k}` : ''; }
 
   // ---------------------------------------------------------------- favorite
   function toggleFav(id) {
@@ -450,6 +611,7 @@
   $('#btn-next').addEventListener('click', () => step(1));
   $('#btn-fav').addEventListener('click', () => state.current && toggleFav(state.current.id));
   $('#btn-timer').addEventListener('click', cycleTimer);
+  $('#btn-share').addEventListener('click', shareCurrent);
 
   const vol = $('#vol');
   if (CAN_VOLUME) {
@@ -481,6 +643,7 @@
     statusEl.textContent = '';
     renderFilters();
     render();
+    openShared();
   }
 
   async function boot() {
