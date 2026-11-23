@@ -467,37 +467,40 @@
     history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : ''));
   }
 
-  // ---------------------------------------------------------------- colegi ascultă
-  // anonim: un id aleator per filă (nu e salvat nicăieri), fără cookie-uri; serverul ține doar id + post + ora
+  // ---------------------------------------------------------------- colegi online
+  // anonim: un id aleator per filă (nu e salvat nicăieri), fără cookie-uri; serverul ține doar id + post + ora.
+  // Cât timp pagina e deschisă (sau cântă în fundal) trimite un semnal la 45 s; la închidere anunță plecarea.
   const live = (() => {
     const sid = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
     let counts = {};
+    let online = 0;
     let ok = false;
-    let beatT = null, pollT = null, current = '';
+    let beatT = null, current = '', away = false;
     const json = (r) => (r.ok ? r.json() : Promise.reject(r.status));
-    const got = (data) => { if (data && data.counts) { counts = data.counts; ok = true; paint(); } };
+    const got = (data) => { if (data && data.counts) { counts = data.counts; online = data.online || 0; ok = true; paint(); } };
     const lost = () => { if (ok) { ok = false; paint(); } };
     // text/plain = cerere „simplă”, fără preflight CORS
-    function beat() {
-      fetch(`${COUNTER}/beat`, { method: 'POST', body: JSON.stringify({ sid, station: current }), keepalive: true, headers: { 'Content-Type': 'text/plain' } })
-        .then(json).then(got, lost);
+    function send(body) {
+      return fetch(`${COUNTER}/beat`, { method: 'POST', body: JSON.stringify(body), keepalive: true, headers: { 'Content-Type': 'text/plain' } }).then(json);
     }
-    function poll() {
-      if (document.visibilityState !== 'visible') return;
-      fetch(`${COUNTER}/counts`).then(json).then(got, lost);
+    function beat() { away = false; send({ sid, station: current }).then(got, lost); }
+    function leave() {
+      if (away) return;
+      away = true;
+      const body = JSON.stringify({ sid, station: '', leave: 1 });
+      if (navigator.sendBeacon) navigator.sendBeacon(`${COUNTER}/beat`, body);
+      else send(JSON.parse(body)).catch(() => {});
     }
+    function restart() { clearInterval(beatT); beat(); beatT = setInterval(beat, 45000); }
     function start() {
-      if (!COUNTER || !state.current) return;
-      if (current === state.current.id && beatT) return;
+      if (!COUNTER || !state.current || current === state.current.id) return;
       current = state.current.id;
-      clearInterval(beatT); clearInterval(pollT); pollT = null;
-      beat();
-      beatT = setInterval(beat, 45000);
+      restart();
     }
     function stop() {
-      if (!COUNTER) return;
-      if (beatT) { clearInterval(beatT); beatT = null; current = ''; beat(); }
-      if (!pollT) pollT = setInterval(poll, 60000);
+      if (!COUNTER || !current) return;
+      current = '';
+      restart();
     }
     function n(id) { return ok ? counts[id] || 0 : 0; }
     function paint() {
@@ -505,19 +508,19 @@
         const el = c.querySelector('.lc');
         if (el) el.textContent = lcText(c.dataset.id);
       });
-      const el = $('#np-live');
-      const k = state.current ? n(state.current.id) : 0;
-      el.hidden = k < 2;
-      el.textContent = k >= 2 ? `🎧 ${k} colegi ascultă` : '';
-      el.dataset.short = k >= 2 ? `🎧 ${k}` : '';
+      const el = $('#online');
+      el.hidden = !ok || online < 1;
+      el.textContent = online <= 1 ? 'doar tu acum' : `${online} colegi online`;
+      el.dataset.short = online <= 1 ? 'doar tu' : `${online} online`;
+      el.title = 'Câți colegi au DanyColegu deschis chiar acum';
     }
     if (COUNTER) {
-      poll();
-      pollT = setInterval(poll, 60000);
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (beatT) beat(); else poll(); } });
-      addEventListener('pagehide', () => {
-        if (beatT && navigator.sendBeacon) navigator.sendBeacon(`${COUNTER}/beat`, JSON.stringify({ sid, station: '' }));
+      restart();
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') restart();
+        else if (!current) { clearInterval(beatT); leave(); } // în fundal fără muzică = plecat
       });
+      addEventListener('pagehide', leave);
     }
     return { start, stop, paint, n };
   })();
