@@ -414,3 +414,25 @@ body { background: var(--bg); }
 
 /* mesajele stau lipite jos, ca în aplicațiile de chat */
 .chat-list > .msg:first-of-type { margin-top: auto; }
+.msg-st { transition: opacity .3s; }
+.msg-st[hidden] { display: none; }
+
+/* mesaj nou: iconița de chat pulsează până deschizi chatul */
+@keyframes chat-pulse { 0%, 100% { transform: scale(1); } 12% { transform: scale(1.22); } 24% { transform: scale(.96); } 36% { transform: scale(1.1); } 50% { transform: scale(1); } }
+@keyframes chat-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tint) 55%, transparent); } 80%, 100% { box-shadow: 0 0 0 14px transparent; } }
+body.chat-unread .bnav [data-view="chat"] { color: var(--text); }
+body.chat-unread .bnav [data-view="chat"] .bnav-ico svg { animation: chat-pulse 1.6s ease-in-out infinite; transform-origin: 50% 60%; }
+body.chat-unread .bnav [data-view="chat"] .bnav-ico::before {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%; animation: chat-ring 1.6s ease-out infinite;
+}
+body.chat-unread .chat-fab svg { animation: chat-pulse 1.6s ease-in-out infinite; }
+body.chat-unread .chat-fab { animation: chat-ring 1.6s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  body.chat-unread .bnav [data-view="chat"] .bnav-ico svg, body.chat-unread .chat-fab svg,
+  body.chat-unread .bnav [data-view="chat"] .bnav-ico::before, body.chat-unread .chat-fab { animation: none; }
+}
+
+/* tastatura deschisă în chat: ascundem bara de jos, câmpul de scris stă lipit de tastatură */
+body.kb-open .bnav { display: none !important; }
+body.kb-open .chat { padding-top: 0; }
+body.kb-open .chat-note { display: none; }

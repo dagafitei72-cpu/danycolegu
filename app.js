@@ -217,6 +217,7 @@
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = player.playing ? 'playing' : 'paused';
     document.querySelectorAll('.card.on').forEach((c) => c.classList.toggle('playing', player.playing));
     if (kind === 'live') live.start(); else if (kind !== 'load') live.stop();
+    if (kind !== 'load' && chatStationHook) chatStationHook();
     document.body.classList.toggle('is-playing', player.playing);
   }
 
@@ -472,8 +473,14 @@
   // anonim: un id aleator per filă (nu e salvat nicăieri), fără cookie-uri; serverul ține doar id + post + ora.
   // Cât timp pagina e deschisă (sau cântă în fundal) trimite un semnal la 45 s; la închidere anunță plecarea.
   let chatHook = null; // setat de chat: primește ultimul id de mesaj la fiecare semnal
+  let chatStationHook = null; // setat de chat: anunță că ai schimbat/oprit postul
   const live = (() => {
-    const sid = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+    // cod aleator păstrat în browser (nu e nume, email sau IP) — leagă mesajele tale de postul pe care îl asculți acum
+    let sid = store.get('dany.sid', '');
+    if (!/^[a-f0-9]{24}$/.test(sid)) {
+      sid = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+      store.set('dany.sid', sid);
+    }
     let counts = {};
     let online = 0;
     let ok = false;
@@ -493,7 +500,7 @@
       if (navigator.sendBeacon) navigator.sendBeacon(`${COUNTER}/beat`, body);
       else send(JSON.parse(body)).catch(() => {});
     }
-    function restart() { clearInterval(beatT); beat(); beatT = setInterval(beat, 45000); }
+    function restart() { clearInterval(beatT); beat(); beatT = setInterval(beat, 30000); }
     function start() {
       if (!COUNTER || !state.current || current === state.current.id) return;
       current = state.current.id;
@@ -543,8 +550,37 @@
       const n = open ? 0 : Math.max(0, latest - seen);
       const txt = n > 99 ? '99+' : String(n);
       for (const b of [badge, $('#nav-badge')]) { b.hidden = n === 0; b.textContent = txt; }
+      // pulsează iconița de chat (bara de jos + butonul rotund) cât timp ai mesaje necitite
+      document.body.classList.toggle('chat-unread', n > 0);
     }
     function markSeen() { if (last > seen) { seen = last; store.set('dany.chatSeen', seen); } showBadge(); }
+
+    // postul de lângă nume = ce ascultă omul ACUM (vine de la server la fiecare citire a chatului)
+    let liveMap = null;
+    let myPk = '';
+    crypto.subtle && crypto.subtle.digest('SHA-256', new TextEncoder().encode(`danycolegu:${sid}`))
+      .then((d) => { myPk = [...new Uint8Array(d)].slice(0, 6).map((b) => b.toString(16).padStart(2, '0')).join(''); })
+      .catch(() => {});
+    function paintStation(el, fallbackName) {
+      let name = fallbackName;
+      if (liveMap) {
+        const id = liveMap[el.dataset.pk];
+        const st = id ? state.byId.get(id) : null;
+        name = st ? st.name : '';
+      }
+      el.textContent = name ? `🎧 ${name}` : '';
+      el.hidden = !name;
+    }
+    function applyLive(map) {
+      if (!map) return;
+      liveMap = map;
+      list.querySelectorAll('.msg-st').forEach((el) => paintStation(el, ''));
+    }
+    function myStationChanged() {
+      if (!liveMap || !myPk) return;
+      liveMap[myPk] = state.current && (player.playing || player.loading) ? state.current.id : '';
+      applyLive(liveMap);
+    }
 
     function add(msgs) {
       if (!msgs || !msgs.length) return;
@@ -555,9 +591,11 @@
         last = m.id;
         const el = document.createElement('div');
         el.className = `msg${m.name === nick ? ' mine' : ''}`;
-        el.innerHTML = `<div class="msg-meta"><b style="color:hsl(${hueOf(m.name)} 75% 70%)"></b>${m.station ? '<span class="msg-st"></span>' : ''}<time>${timeOf(m.ts)}</time></div><div class="bubble"></div>`;
+        el.innerHTML = `<div class="msg-meta"><b style="color:hsl(${hueOf(m.name)} 75% 70%)"></b><span class="msg-st"></span><time>${timeOf(m.ts)}</time></div><div class="bubble"></div>`;
         el.querySelector('b').textContent = m.name;
-        if (m.station) el.querySelector('.msg-st').textContent = `🎧 ${m.station}`;
+        const stEl = el.querySelector('.msg-st');
+        stEl.dataset.pk = m.pk || '';
+        paintStation(stEl, m.station || '');
         el.querySelector('.bubble').textContent = m.text;
         frag.appendChild(el);
       }
@@ -572,7 +610,7 @@
       if (loading || document.visibilityState !== 'visible') return;
       loading = true;
       fetch(`${COUNTER}/chat?after=${last}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-        .then((d) => { add(d.msgs); if (!last) $('#chat-empty').hidden = false; })
+        .then((d) => { add(d.msgs); applyLive(d.live); if (!last) $('#chat-empty').hidden = false; })
         .catch(() => {})
         .finally(() => { loading = false; });
     }
@@ -586,15 +624,23 @@
     }
 
     // iPhone: când apare tastatura, panoul se strânge pe zona vizibilă
+    // Pe iPhone, window.innerHeight nu se schimbă mereu cu tastatura (mai ales din ecranul principal),
+    // deci comparăm zona vizibilă cu cea mai mare înălțime văzută: dacă scade mult, e tastatura.
+    let maxVV = 0, lastW = 0;
     function fitViewport() {
-      // doar cu tastatura deschisă (zona vizibilă mult mai mică decât ecranul); altfel bara de jos rămâne vizibilă
-      const kb = window.visualViewport && innerHeight - visualViewport.height > 120;
+      const vv = window.visualViewport;
+      if (!vv) return;
+      if (innerWidth !== lastW) { lastW = innerWidth; maxVV = 0; } // rotire ecran
+      maxVV = Math.max(maxVV, vv.height);
+      const kb = maxVV - vv.height > 100;
+      document.body.classList.toggle('kb-open', open && kb);
       if (!open || !kb || innerWidth > 640) { panel.style.height = ''; panel.style.top = ''; panel.style.bottom = ''; return; }
       panel.style.bottom = 'auto';
-      panel.style.height = `${visualViewport.height}px`;
-      panel.style.top = `${visualViewport.offsetTop}px`;
+      panel.style.top = `${vv.offsetTop}px`;
+      panel.style.height = `${vv.height}px`;
       list.scrollTop = list.scrollHeight;
     }
+    const refit = () => { fitViewport(); setTimeout(fitViewport, 120); setTimeout(fitViewport, 350); setTimeout(fitViewport, 700); };
 
     function setOpen(v) {
       open = v;
@@ -625,6 +671,11 @@
     if (window.visualViewport) {
       visualViewport.addEventListener('resize', fitViewport);
       visualViewport.addEventListener('scroll', fitViewport);
+    }
+    // iOS anunță redimensionarea cu întârziere: verificăm de câteva ori după focus/blur
+    for (const el of [input, nameInput]) {
+      el.addEventListener('focus', refit);
+      el.addEventListener('blur', refit);
     }
 
     nameForm.addEventListener('submit', (e) => {
@@ -658,6 +709,7 @@
         if (d.error) { toast('Mesajul nu a plecat. Încearcă din nou.'); return; }
         input.value = '';
         add(d.msgs);
+        applyLive(d.live);
       }).catch(() => toast('Mesajul nu a plecat. Verifică internetul.'))
         .finally(() => { sending = false; input.focus(); });
     });
@@ -678,9 +730,11 @@
     return {
       // vine din semnalul de prezență (la ~45 s): ultimul id de mesaj de pe server
       beat(n) { latest = Math.max(latest, n || 0); showBadge(); },
+      stationChanged() { myStationChanged(); if (open) setTimeout(fetchNew, 1500); },
     };
   })();
   chatHook = (n) => chat.beat(n);
+  chatStationHook = () => chat.stationChanged();
 
   function lcText(id) { const k = live.n(id); return k > 0 ? `🎧 ${k}` : ''; }
 
@@ -836,7 +890,7 @@
 
   // ---------------------------------------------------------------- actualizare automată
   // telefonul ține pagina în cache; la deschidere verificăm version.json și reîncărcăm dacă e versiune nouă
-  const VERSION = '8';
+  const VERSION = '11';
   function checkUpdate() {
     if (location.protocol !== 'https:') return;
     fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' }).then((r) => r.json()).then((d) => {
