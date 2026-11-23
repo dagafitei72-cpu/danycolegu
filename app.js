@@ -815,5 +815,23 @@
     }
   }
 
+  // ---------------------------------------------------------------- actualizare automată
+  // telefonul ține pagina în cache; la deschidere verificăm version.json și reîncărcăm dacă e versiune nouă
+  const VERSION = '7';
+  function checkUpdate() {
+    if (location.protocol !== 'https:') return;
+    fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' }).then((r) => r.json()).then((d) => {
+      if (!d || !d.v || String(d.v) === VERSION) return;
+      let tried = '';
+      try { tried = sessionStorage.getItem('dany.reloadFor') || ''; } catch { /* privat */ }
+      if (tried === String(d.v)) return; // o singură reîncercare, fără bucle
+      try { sessionStorage.setItem('dany.reloadFor', String(d.v)); } catch { /* privat */ }
+      if (player.playing) { toast('A apărut o versiune nouă. Se aplică la următoarea deschidere.'); return; }
+      location.reload();
+    }).catch(() => {});
+  }
+  checkUpdate();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+
   boot();
 })();

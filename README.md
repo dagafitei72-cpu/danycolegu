@@ -15,3 +15,5 @@ Lista vine live din API-ul public Radio Browser (de1/de2/fi1/all), cu cache 12h 
 
 Logica listei (curățare, dubluri, gen, oraș, posturi mari, stream-uri https găsite manual)
 e în `stations.js`; pagina și player-ul în `app.js`.
+
+La fiecare publicare: crește numărul din `version.json`, `VERSION` din `app.js` și `?v=` din `index.html` (toate la fel), ca telefoanele să ia singure versiunea nouă.
