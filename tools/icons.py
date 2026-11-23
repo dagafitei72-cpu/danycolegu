@@ -1,31 +1,55 @@
-# Generează iconițele PNG (python tools/icons.py). Desen original: punct + două unde.
+# Generează toate iconițele din logo-ul DanyColegu (tools/src/logo-original.webp).
+# Rulare: python tools/icons.py
 from PIL import Image, ImageDraw
 import os
-OUT = os.path.join(os.path.dirname(__file__), '..', 'icons')
-BG, AC = (20, 24, 33), (255, 181, 71)
-def make(size, pad=0.0, rounded=True):
-    S = size * 4
-    im = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    if rounded: d.rounded_rectangle([0, 0, S - 1, S - 1], radius=int(S * 0.22), fill=BG)
-    else: d.rectangle([0, 0, S, S], fill=BG)
-    k = S * (1 - 2 * pad) / 32.0
-    ox = oy = S * pad + k * 0.5
-    def P(x, y): return (ox + x * k, oy + y * k)
-    cx, cy = P(9, 23.5)
-    r = 3.4 * k
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=AC)
-    w = int(3.2 * k)
-    dim = tuple(int(a * 0.6 + b * 0.4) for a, b in zip(AC, BG))
-    for R, col in ((10, AC), (18, dim)):
-        Rk = R * k + w / 2
-        d.arc([cx - Rk, cy - Rk, cx + Rk, cy + Rk], 270, 360, fill=col, width=w)
-        rc = Rk - w / 2
-        for (x, y) in ((cx, cy - rc), (cx + rc, cy)):
-            d.ellipse([x - w / 2, y - w / 2, x + w / 2, y + w / 2], fill=col)
-    return im.resize((size, size), Image.LANCZOS)
-make(180, 0.12, False).convert('RGB').save(os.path.join(OUT, 'apple-touch-icon.png'))
-make(192, 0.10).save(os.path.join(OUT, 'icon-192.png'))
-make(512, 0.10).save(os.path.join(OUT, 'icon-512.png'))
-make(512, 0.20, False).convert('RGB').save(os.path.join(OUT, 'icon-512-maskable.png'))
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(HERE, '..', 'icons')
+NAVY = (9, 16, 40, 255)
+
+src = Image.open(os.path.join(HERE, 'src', 'logo-original.webp')).convert('RGBA')
+# pătratul rotunjit din imagine (fără marginea neagră estompată din jur)
+sq = src.crop((72, 72, 1184, 1184))
+flat = Image.new('RGBA', sq.size, NAVY)
+flat.alpha_composite(sq)
+
+
+def resized(size):
+    return flat.resize((size, size), Image.LANCZOS)
+
+
+def rounded(size, radius=0.19):
+    im = resized(size)
+    mask = Image.new('L', (size * 4, size * 4), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, size * 4 - 1, size * 4 - 1], radius=int(size * 4 * radius), fill=255)
+    im.putalpha(mask.resize((size, size), Image.LANCZOS))
+    return im
+
+
+def padded(size, scale):
+    im = Image.new('RGBA', (size, size), NAVY)
+    inner = int(size * scale)
+    im.alpha_composite(rounded(inner, 0.14), ((size - inner) // 2, (size - inner) // 2))
+    return im
+
+
+# iPhone (iOS rotunjește singur colțurile → pătrat plin)
+resized(180).convert('RGB').save(os.path.join(OUT, 'apple-touch-icon.png'), optimize=True)
+# Android / manifest
+rounded(192).save(os.path.join(OUT, 'icon-192.png'), optimize=True)
+rounded(512).save(os.path.join(OUT, 'icon-512.png'), optimize=True)
+padded(512, 0.80).convert('RGB').save(os.path.join(OUT, 'icon-512-maskable.png'), optimize=True)
+# favicon + logo din antet
+rounded(64).save(os.path.join(OUT, 'favicon-64.png'), optimize=True)
+rounded(160).save(os.path.join(OUT, 'logo-160.png'), optimize=True)
+# previzualizare la linkuri (WhatsApp, Messenger etc.)
+og = Image.new('RGBA', (1200, 630), NAVY)
+glow = Image.new('RGBA', (1200, 630), (0, 0, 0, 0))
+d = ImageDraw.Draw(glow)
+for i in range(60, 0, -1):
+    a = int(12 * (60 - i) / 60)
+    d.ellipse([600 - i * 9, 315 - i * 5, 600 + i * 9, 315 + i * 5], fill=(40, 70, 160, a))
+og.alpha_composite(glow)
+og.alpha_composite(rounded(560, 0.16), ((1200 - 560) // 2, 35))
+og.convert('RGB').save(os.path.join(OUT, 'og.jpg'), quality=86, optimize=True)
 print('ok')
