@@ -1,0 +1,28 @@
+/* Generat de tools/https-check.mjs: posturi doar-http care au și variantă https (id → url). */
+globalThis.DanyFixes = {
+ "f65094f5-2cae-4d4e-ab4a-12f2e7d274bb": "https://live.dancemusic.ro:7000/radio.mp3",
+ "6aa20383-4ee2-4e28-a42b-b20ecb6f7a0b": "https://online.webcastradio.ro/fun",
+ "960e6f4f-0601-11e8-ae97-52543be04c81": "https://radiocdn.nxthost.com/radio-deea",
+ "6d1e1d4c-a321-11e9-a787-52543be04c81": "https://asculta.rfi.ro/live.aac",
+ "e118e67d-ddbc-48ef-ab98-b60435339a4a": "https://live.radiomiraj.ro:9952/stream",
+ "0a41650f-2a40-46c2-a016-dcd030a9147e": "https://a1.bisericilive.com/mainradioarmoniaro.mp3",
+ "6bfa20f3-b967-40ce-9a30-8e850d485966": "https://listen.radiounique.ro:8106/stream",
+ "15d9bfdc-05dc-44c5-bc52-74d3e7e1c8f6": "https://fr1.streamhosting.ch/lounge128.mp3",
+ "962905de-0601-11e8-ae97-52543be04c81": "https://stream.mariaradio.ro/MRE",
+ "2d6f60f0-2ba0-406f-b43f-2e946bbd63c7": "https://web.archive.org/web/20180110095018if_/http://mp3.radiopopular.ro:7777/;",
+ "6a00fab6-0fc6-4c9a-bb23-361925ff08ef": "https://live.radioprob.ro:8888/stream",
+ "9aaacdee-2f77-4ab0-a723-e925a1d0d7e6": "https://ssl.radios.show:8026/;",
+ "1977d753-4544-4d7b-8fd0-3ec75820ef16": "https://n01.radiojar.com/du8khw2d2wzuv",
+ "98bac757-0eaa-423c-9f29-9debe853bc4d": "https://radiosud.ro/stream/",
+ "bb69d366-3de6-4e66-a1a6-3f50ff7fdc29": "https://live.radiomynele.ro:8000/;",
+ "9ec99d87-a925-4b60-a38e-aa6574845812": "https://stream.zeno.fm/bpn1hy0h6ehvv",
+ "f0f42889-6288-444f-bab1-bbb58f85d2d1": "https://live.radiotop.ro:8000/radio.mp3",
+ "9e6e8d32-6091-4153-93aa-01d38519de5a": "https://radiototal.radioca.st/stream",
+ "97163fb0-234b-4bee-8c51-a15c33077645": "https://play.wrhradios.com:8024/stream",
+ "674a798d-b2d6-4f7c-a970-ac1975ad1ccf": "https://radio.sonicpanel.ro:8046/stream",
+ "9ea4b2d1-ea90-4923-a64d-85f70b91a508": "https://live.radioromance21.ro:9950/stream",
+ "c3e7746b-ea17-4314-b640-70523420d04a": "https://c34.radioboss.fm:8175/autodj",
+ "964e4ed8-0601-11e8-ae97-52543be04c81": "https://www.radiocondor.ro:6303/",
+ "4bfec7cd-4992-4ddc-993d-fae3d23f2664": "https://live.radiotrapanele.ro:8132/stream",
+ "9305e434-9e1b-4fba-aba7-9de9d4b10a1c": "https://stream2.radiotransilvania.ro/Nagyvarad"
+};

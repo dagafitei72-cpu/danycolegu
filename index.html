@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>DanyColegu — radio românesc, fără reclame</title>
+  <meta name="description" content="Posturi de radio din România, live în browser și pe telefon, fără reclame în aplicație. Caută, filtrează, salvează favorite.">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DanyColegu">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://de1.api.radio-browser.info" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="9" cy="23" r="3.2" fill="currentColor"/>
+        <path d="M9 13.5a9.5 9.5 0 0 1 9.5 9.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        <path d="M9 5.5A17.5 17.5 0 0 1 26.5 23" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity=".55"/>
+      </svg>
+      <div>
+        <h1>Dany<span>Colegu</span></h1>
+        <p class="tagline">radio românesc · fără reclame</p>
+      </div>
+    </div>
+    <label class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="q" type="search" placeholder="Caută un post, gen sau oraș" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search" aria-label="Caută">
+    </label>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="all" aria-selected="true">Toate <span id="count-all" class="pill"></span></button>
+    <button role="tab" data-tab="fav" aria-selected="false">Favorite <span id="count-fav" class="pill"></span></button>
+    <button role="tab" data-tab="recent" aria-selected="false">Recente</button>
+  </nav>
+
+  <div class="filters">
+    <div id="genres" class="chips" aria-label="Gen"></div>
+    <select id="city" aria-label="Oraș"><option value="">Toate orașele</option></select>
+  </div>
+
+  <main>
+    <div id="status" class="status" role="status">Se încarcă posturile…</div>
+    <div id="list" class="list"></div>
+    <div id="empty" class="empty" hidden></div>
+  </main>
+
+  <footer class="foot">
+    <label id="http-toggle" class="switch" hidden>
+      <input type="checkbox" id="show-http">
+      <span>Arată și <b id="http-count">0</b> posturi doar-http (nu pot porni pe o pagină securizată)</span>
+    </label>
+    <p>Lista de posturi vine din <a href="https://www.radio-browser.info" target="_blank" rel="noopener">Radio Browser</a>, o bază de date comunitară. Logo-urile și emisiunile aparțin posturilor.</p>
+  </footer>
+
+  <section id="player" class="player" aria-label="Player" hidden>
+    <div class="np">
+      <div id="np-logo" class="logo"></div>
+      <div class="np-text">
+        <div id="np-name" class="np-name"></div>
+        <div id="np-state" class="np-state"></div>
+      </div>
+    </div>
+    <div class="ctrls">
+      <button id="btn-prev" class="ib" aria-label="Postul anterior"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" fill="currentColor"/></svg></button>
+      <button id="btn-play" class="ib play" aria-label="Pornește"><svg viewBox="0 0 24 24"><path class="i-play" d="M8 5v14l11-7z" fill="currentColor"/><path class="i-pause" d="M7 5h4v14H7zm6 0h4v14h-4z" fill="currentColor"/><circle class="i-load" cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-dasharray="36 60" stroke-linecap="round"/></svg></button>
+      <button id="btn-next" class="ib" aria-label="Postul următor"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="extra">
+      <button id="btn-fav" class="ib fav-btn" aria-label="Adaugă la favorite" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 20.3 4.6 13a4.6 4.6 0 0 1 6.5-6.6l.9.9.9-.9A4.6 4.6 0 0 1 19.4 13z" fill="currentColor"/></svg></button>
+      <button id="btn-timer" class="ib timer" aria-label="Oprire automată"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="currentColor"/></svg><span id="timer-label"></span></button>
+      <label class="vol" id="vol-wrap">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        <input id="vol" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Volum">
+      </label>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <audio id="audio" preload="none" playsinline></audio>
+
+  <script src="fixes.js"></script>
+  <script src="stations.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
